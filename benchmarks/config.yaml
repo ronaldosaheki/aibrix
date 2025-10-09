@@ -4,6 +4,30 @@
 # API and model settings
 tokenizer: "deepseek-ai/deepseek-llm-7b-chat"
 
+# Provider selection (OpenRouter.ai or custom endpoint)
+provider: "custom"  # Options: "openrouter", "custom"
+# When provider is "openrouter", you can specify which OpenRouter provider to use
+# This allows you to compare different providers through OpenRouter.ai
+# OpenRouter.ai provider routing configuration
+# See: https://openrouter.ai/docs/features/provider-routing#json-schema-for-provider-preferences
+openrouter_provider_config:
+  order: ["openai"]
+  allow_fallbacks: false
+  # order: ["anthropic", "openai"]  # List of provider slugs to try in order
+  # allow_fallbacks: true  # Whether to allow backup providers when primary is unavailable
+  # require_parameters: false  # Only use providers that support all parameters
+  # data_collection: "allow"  # Control whether to use providers that may store data ("allow" or "deny")
+  # zdr: false  # Restrict routing to only ZDR (Zero Data Retention) endpoints
+  # only: ["anthropic"]  # List of provider slugs to allow for this request
+  # ignore: ["deepinfra"]  # List of provider slugs to skip for this request
+  # quantizations: ["int4", "int8"]  # List of quantization levels to filter by
+  # sort: "price"  # Sort providers by "price", "throughput", or "latency"
+  # max_price:  # Maximum pricing you want to pay for this request
+  #   prompt: 0.01
+  #   completion: 0.01
+  #   request: 0.0
+# When provider is "custom", the endpoint below will be used directly
+
 # ---------------
 # STEP 1: DATASET GENERATION
 # ---------------

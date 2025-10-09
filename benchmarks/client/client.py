@@ -26,6 +26,7 @@ async def send_request_streaming(client: openai.AsyncOpenAI,
                              request_id: int,
                              session_id: int,
                              target_time: int,
+                             openrouter_provider_config: Optional[dict] = None,
                              ):
     session_id = request.get("session_id", None)
     prompt = prepare_prompt(
@@ -42,14 +43,22 @@ async def send_request_streaming(client: openai.AsyncOpenAI,
         if target_time > start_time:
             await asyncio.sleep(target_time - start_time)
         dispatch_time = asyncio.get_event_loop().time()
-        response_stream = await client.chat.completions.create(
-            model=model,
-            messages=prompt,
-            temperature=0,
-            max_tokens=max_output,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+        
+        # Prepare request parameters
+        request_params = {
+            "model": model,
+            "messages": prompt,
+            "temperature": 0,
+            "max_tokens": max_output,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        
+        # Add provider configuration to extra_body if configured
+        if openrouter_provider_config:
+            request_params["extra_body"] = {"provider": openrouter_provider_config}
+        
+        response_stream = await client.chat.completions.create(**request_params)
         if hasattr(response_stream, 'response') and hasattr(response_stream.response, 'headers'):
             target_pod = response_stream.response.headers.get('target-pod')
             target_request_id = response_stream.response.headers.get('request-id')
@@ -168,6 +177,7 @@ async def send_request_batch(client: openai.AsyncOpenAI,
                              request_id: int,
                              session_id: int, 
                              target_time: int,
+                             openrouter_provider_config: Optional[dict] = None,
                              ):
     session_id = request.get("session_id", None)
     prompt = prepare_prompt(
@@ -182,12 +192,20 @@ async def send_request_batch(client: openai.AsyncOpenAI,
         if target_time > start_time:
             await asyncio.sleep(target_time - start_time)
         dispatch_time = asyncio.get_event_loop().time()
-        response = await client.chat.completions.create(
-            model=model,
-            messages=prompt,
-            temperature=0,
-            max_tokens=max_output,
-        )
+        
+        # Prepare request parameters
+        request_params = {
+            "model": model,
+            "messages": prompt,
+            "temperature": 0,
+            "max_tokens": max_output,
+        }
+        
+        # Add provider configuration to extra_body if configured
+        if openrouter_provider_config:
+            request_params["extra_body"] = {"provider": openrouter_provider_config}
+        
+        response = await client.chat.completions.create(**request_params)
         if hasattr(response, 'response') and hasattr(response.response, 'headers'):
             target_pod = response.response.headers.get('target-pod')
 
@@ -275,6 +293,8 @@ async def benchmark_launch(
     send_request_func: Callable,
     duration_limit: Optional[float] = None,
     max_concurrent_sessions: Optional[int] = None,
+    provider: str = "custom",
+    openrouter_provider_config: Optional[dict] = None,
 ) -> None:
     request_id = 0
     base_time = time.time()
@@ -310,6 +330,7 @@ async def benchmark_launch(
                     request_id=request_id,
                     session_id=request.get("session_id", None) if "session_id" in request else None,
                     target_time=target_time,
+                    openrouter_provider_config=openrouter_provider_config,
                 )
             )
             request_id += 1
@@ -449,6 +470,16 @@ def main(args):
         # Get max_concurrent_sessions from args if provided
         max_concurrent_sessions = args.max_concurrent_sessions if hasattr(args, 'max_concurrent_sessions') else None
         
+        # Get provider configuration from args if provided
+        provider = args.provider if hasattr(args, 'provider') else "custom"
+        openrouter_provider_config = None
+        if hasattr(args, 'openrouter_provider_config') and args.openrouter_provider_config:
+            try:
+                openrouter_provider_config = json.loads(args.openrouter_provider_config)
+            except json.JSONDecodeError:
+                logging.error(f"Invalid JSON in openrouter_provider_config: {args.openrouter_provider_config}")
+                openrouter_provider_config = None
+        
         start_time = time.time()
         asyncio.run(benchmark_launch(
             api_key = args.api_key,
@@ -464,6 +495,8 @@ def main(args):
             send_request_func=send_request_func,
             duration_limit=duration_limit,
             max_concurrent_sessions=max_concurrent_sessions,
+            provider=provider,
+            openrouter_provider_config=openrouter_provider_config,
         ))
         end_time = time.time()
         logging.info(f"Benchmark completed in {end_time - start_time:.2f} seconds")
@@ -484,6 +517,8 @@ if __name__ == "__main__":
     parser.add_argument('--max-retries', type=int, default=0, help="Number of maximum retries for each request.")
     parser.add_argument('--duration-limit', type=float, default=None, help="Duration limit in seconds. Benchmark stops after this time, cancelling pending requests. If not set, uses workload's last timestamp.")
     parser.add_argument('--max-concurrent-sessions', type=int, default=None, help="Maximum number of sessions that can run concurrently. Only applies to sessioned workloads.")
+    parser.add_argument('--provider', type=str, default="custom", help="Provider type: 'openrouter' or 'custom'")
+    parser.add_argument('--openrouter-provider-config', type=str, default=None, help="OpenRouter provider configuration as JSON string")
 
     args = parser.parse_args()
     main(args)

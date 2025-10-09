@@ -287,6 +287,16 @@ class BenchmarkRunner:
         # This is separate from workload generator's max_concurrent_sessions
         max_concurrent_sessions = self.config.get("client_max_concurrent_sessions", None)
         
+        # Get provider configuration
+        provider = self.config.get("provider", "custom")
+        openrouter_provider_config = self.config.get("openrouter_provider_config", None)
+        
+        # Convert openrouter_provider_config to JSON string if it exists
+        openrouter_provider_config_str = None
+        if openrouter_provider_config:
+            import json
+            openrouter_provider_config_str = json.dumps(openrouter_provider_config)
+        
         args_dict = {
             "workload_path": workload_file,
             "endpoint": self.config["endpoint"],
@@ -301,6 +311,8 @@ class BenchmarkRunner:
             "max_retries": self.config.get("max_retries", 0),
             "duration_limit": duration_limit,
             "max_concurrent_sessions": max_concurrent_sessions,
+            "provider": provider,
+            "openrouter_provider_config": openrouter_provider_config_str,
         }
         args = Namespace(**args_dict)
         logging.info(f"Running client with args: {args}")
