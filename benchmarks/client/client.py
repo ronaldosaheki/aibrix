@@ -57,11 +57,18 @@ async def send_request_streaming(client: openai.AsyncOpenAI,
         # Add provider configuration to extra_body if configured
         if openrouter_provider_config:
             request_params["extra_body"] = {"provider": openrouter_provider_config}
+            logging.warning(f"Request {request_id}: Sending provider config to OpenRouter: {openrouter_provider_config}")
+        else:
+            logging.warning(f"Request {request_id}: No provider config - OpenRouter will auto-route!")
         
         response_stream = await client.chat.completions.create(**request_params)
         if hasattr(response_stream, 'response') and hasattr(response_stream.response, 'headers'):
             target_pod = response_stream.response.headers.get('target-pod')
             target_request_id = response_stream.response.headers.get('request-id')
+            # Log OpenRouter provider info
+            provider_name = response_stream.response.headers.get('x-openrouter-provider-name')
+            if provider_name:
+                logging.info(f"Request {request_id}: Served by provider: {provider_name}")
 
         text_chunks = []
         prompt_tokens = 0
@@ -204,6 +211,9 @@ async def send_request_batch(client: openai.AsyncOpenAI,
         # Add provider configuration to extra_body if configured
         if openrouter_provider_config:
             request_params["extra_body"] = {"provider": openrouter_provider_config}
+            logging.warning(f"Request {request_id}: Sending provider config to OpenRouter: {openrouter_provider_config}")
+        else:
+            logging.warning(f"Request {request_id}: No provider config - OpenRouter will auto-route!")
         
         response = await client.chat.completions.create(**request_params)
         if hasattr(response, 'response') and hasattr(response.response, 'headers'):
