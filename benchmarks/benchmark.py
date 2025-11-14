@@ -219,6 +219,8 @@ class BenchmarkRunner:
         self.ensure_directories(workload_type_dir)
         
         dataset_file = self.config["dataset_file"]  # Use the pre-defined dataset_file
+        # Get custom workload filename if specified, otherwise default to "workload"
+        workload_filename = self.config.get("workload_filename", "workload")
         args_dict = {
             "prompt_file": dataset_file,
             "interval_ms": self.config["interval_ms"],
@@ -227,6 +229,7 @@ class BenchmarkRunner:
             "tokenizer": self.config["tokenizer"],
             "output_dir": workload_type_dir,
             "output_format": "jsonl",
+            "output_filename": workload_filename,
         }
 
         if workload_type == "constant":
