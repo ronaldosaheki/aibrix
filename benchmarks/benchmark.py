@@ -40,14 +40,156 @@ def print_nested_parameters(config_dict, prefix=''):
             print(f"  - {prefix}{key}: {value}")
 
 
+def deep_merge(base_dict, override_dict):
+    """
+    Deep merge two dictionaries, with override_dict taking precedence.
+    Handles nested dictionaries recursively.
+    """
+    result = base_dict.copy()
+    for key, value in override_dict.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 class BenchmarkRunner:
-    def __init__(self, config_base="config/base.yaml", overrides=None):
+    def __init__(self, config_base="config/base.yaml", overrides=None, service_config=None, run_id=None, reuse_from_run=None):
         self.overrides = overrides or []
+        self.service_config = service_config
+        self.run_id = run_id
+        self.reuse_from_run = reuse_from_run
+        self.reuse_config = {}  # Will store which outputs to reuse
+        
+        # Parse reuse_from_run if provided (format: "run-id:dataset,workload" or just "run-id")
+        if self.reuse_from_run:
+            self.parse_reuse_config()
+        
         self.load_config(config_base)
+        
+        # Apply run_id to output paths if provided
+        if self.run_id:
+            self.apply_run_id_to_paths()
+        
+        # Apply reuse paths if specified
+        if self.reuse_from_run:
+            self.apply_reuse_paths()
+        
         logging.warning(f"Loaded Config: {self.config}")
         for dir_key in ["dataset_dir", "workload_dir", "client_output", "trace_output"]:
-            path_str = self.config[dir_key]
-            self.ensure_directories(path_str)
+            path_str = self.config.get(dir_key, "")
+            if path_str:
+                self.ensure_directories(path_str)
+    
+    def parse_reuse_config(self):
+        """Parse reuse_from_run string to determine what to reuse."""
+        # Format: "run-id" or "run-id:dataset,workload" or "run-id:all"
+        if ":" in self.reuse_from_run:
+            run_id, reuse_types = self.reuse_from_run.split(":", 1)
+            if reuse_types == "all":
+                self.reuse_config = {
+                    "dataset": run_id,
+                    "workload": run_id,
+                    "client_outputs": run_id,
+                    "trace_analysis": run_id
+                }
+            else:
+                for reuse_type in reuse_types.split(","):
+                    reuse_type = reuse_type.strip()
+                    if reuse_type in ["dataset", "workload", "client_outputs", "trace_analysis"]:
+                        self.reuse_config[reuse_type] = run_id
+        else:
+            # Default: reuse all if just run-id provided
+            run_id = self.reuse_from_run
+            self.reuse_config = {
+                "dataset": run_id,
+                "workload": run_id,
+                "client_outputs": run_id,
+                "trace_analysis": run_id
+            }
+    
+    def apply_reuse_paths(self):
+        """Apply paths from reused run to current config."""
+        try:
+            from run_outputs import discover_run_outputs
+            
+            for output_type, source_run_id in self.reuse_config.items():
+                source_outputs = discover_run_outputs(source_run_id, config=self.config)
+                
+                if output_type == "dataset" and source_outputs["dataset"]["exists"]:
+                    # Use source dataset path
+                    self.config["dataset_dir"] = source_outputs["dataset"]["path"]
+                    # Update dataset_file
+                    if "dataset_file" in self.config:
+                        dataset_file = Path(source_outputs["dataset"]["path"]) / Path(self.config["dataset_file"]).name
+                        self.config["dataset_file"] = str(dataset_file)
+                    logging.info(f"Reusing dataset from run: {source_run_id}")
+                
+                elif output_type == "workload" and source_outputs["workload"]["exists"]:
+                    # Use source workload path
+                    self.config["workload_dir"] = source_outputs["workload"]["path"]
+                    # Update workload_file
+                    if "workload_file" in self.config:
+                        workload_file = Path(source_outputs["workload"]["path"]) / Path(self.config["workload_file"]).name
+                        self.config["workload_file"] = str(workload_file)
+                    logging.info(f"Reusing workload from run: {source_run_id}")
+                
+                elif output_type == "client_outputs" and source_outputs["client_outputs"]["exists"]:
+                    # Use source client output path
+                    self.config["client_output"] = source_outputs["client_outputs"]["path"]
+                    logging.info(f"Reusing client outputs from run: {source_run_id}")
+                
+                elif output_type == "trace_analysis" and source_outputs["trace_analysis"]["exists"]:
+                    # Use source trace analysis path
+                    self.config["trace_output"] = source_outputs["trace_analysis"]["path"]
+                    logging.info(f"Reusing trace analysis from run: {source_run_id}")
+        except ImportError:
+            logging.warning("run_outputs module not available, cannot reuse outputs")
+    
+    def apply_run_id_to_paths(self):
+        """Apply run_id to output paths."""
+        if not self.run_id:
+            return
+        
+        # Paths to modify with run_id
+        path_keys = ["dataset_dir", "workload_dir", "client_output", "trace_output"]
+        
+        for key in path_keys:
+            if key in self.config and self.config[key]:
+                original_path = self.config[key]
+                # Add run_id to path
+                path = Path(original_path)
+                # Append run_id to the directory name
+                if path.name:
+                    # For paths like "./output/dataset_gpt-oss-120" -> "./output/dataset_gpt-oss-120_run-id"
+                    self.config[key] = str(path.parent / f"{path.name}_{self.run_id}")
+                else:
+                    # For paths ending with /, append run_id
+                    self.config[key] = f"{original_path.rstrip('/')}_{self.run_id}"
+        
+        # Update workload_file to match new workload_dir
+        if "workload_file" in self.config and "workload_dir" in self.config:
+            workload_file = self.config["workload_file"]
+            workload_dir = self.config["workload_dir"]
+            # Replace template variable or update path
+            if "${workload_dir}" in workload_file:
+                self.config["workload_file"] = workload_file.replace("${workload_dir}", workload_dir)
+            else:
+                # Update path to match new workload_dir
+                old_workload_dir = Path(workload_file).parent
+                new_workload_file = Path(workload_dir) / Path(workload_file).name
+                self.config["workload_file"] = str(new_workload_file)
+        
+        # Update dataset_file to match new dataset_dir
+        if "dataset_file" in self.config and "dataset_dir" in self.config:
+            dataset_file = self.config["dataset_file"]
+            dataset_dir = self.config["dataset_dir"]
+            if "${dataset_dir}" in dataset_file:
+                self.config["dataset_file"] = dataset_file.replace("${dataset_dir}", dataset_dir)
+            else:
+                # Update path to match new dataset_dir
+                new_dataset_file = Path(dataset_dir) / Path(dataset_file).name
+                self.config["dataset_file"] = str(new_dataset_file)
             
     def apply_overrides(self, config_dict):
         for override in self.overrides:
@@ -78,9 +220,17 @@ class BenchmarkRunner:
         logging.info(f"Loading configuration from {config_path}")
         with open(config_path, 'r') as f:
             content = os.path.expandvars(f.read())
-            raw_config = yaml.safe_load(content)
-            raw_config = self.apply_overrides(raw_config)
+            raw_config = yaml.safe_load(content) or {}
         
+        # If service_config is provided, merge it with base config
+        if self.service_config:
+            logging.info(f"Merging service-specific overrides")
+            raw_config = deep_merge(raw_config, self.service_config)
+        
+        # Apply command-line overrides
+        raw_config = self.apply_overrides(raw_config)
+        
+        # Resolve template variables
         resolved_config = {}
         for key, value in raw_config.items():
             if isinstance(value, str):
@@ -94,6 +244,16 @@ class BenchmarkRunner:
         path.mkdir(parents=True, exist_ok=True)
 
     def generate_dataset(self):
+        # Check if reusing dataset
+        if "dataset" in self.reuse_config:
+            dataset_file = Path(self.config["dataset_file"])
+            if dataset_file.exists():
+                logging.info(f"Skipping dataset generation - reusing from run: {self.reuse_config['dataset']}")
+                logging.info(f"Using dataset: {dataset_file}")
+                return
+            else:
+                logging.warning(f"Reuse specified but dataset not found: {dataset_file}")
+        
         dataset_type = self.config["prompt_type"]
         logging.info(f"Generating synthetic dataset {dataset_type}...")
 
@@ -124,6 +284,8 @@ class BenchmarkRunner:
             synthetic_prefix_sharing_dataset.main(args)
             
         elif dataset_type == "synthetic_multiturn":
+            # Get hf_token from config or environment for Hugging Face authentication
+            hf_token = self.config.get('hf_token') or os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
             args_dict = {
                 "output": dataset_file,
                 "tokenizer": self.config["tokenizer"],
@@ -135,6 +297,8 @@ class BenchmarkRunner:
                 "num_sessions_mean": subconfig["num_sessions"],
                 "num_sessions_std": subconfig["num_sessions_std"],
             }
+            if hf_token:
+                args_dict["hf_token"] = hf_token
             args = Namespace(**args_dict)
             multiturn_prefix_sharing_dataset.main(args)
 
@@ -165,6 +329,16 @@ class BenchmarkRunner:
             utility.main(args)
 
     def generate_workload(self):
+        # Check if reusing workload
+        if "workload" in self.reuse_config:
+            workload_file = Path(self.config["workload_file"])
+            if workload_file.exists():
+                logging.info(f"Skipping workload generation - reusing from run: {self.reuse_config['workload']}")
+                logging.info(f"Using workload: {workload_file}")
+                return
+            else:
+                logging.warning(f"Reuse specified but workload not found: {workload_file}")
+        
         workload_type = self.config["workload_type"]
         print("[INFO] Generating workload...")
         
@@ -287,6 +461,9 @@ class BenchmarkRunner:
         # This is separate from workload generator's max_concurrent_sessions
         max_concurrent_sessions = self.config.get("client_max_concurrent_sessions", None)
         
+        # Get client_max_requests from client config (limit total requests processed)
+        max_requests = self.config.get("client_max_requests", None)
+        
         # Get provider configuration
         provider = self.config.get("provider", "custom")
         openrouter_provider_config = self.config.get("openrouter_provider_config", None)
@@ -311,6 +488,7 @@ class BenchmarkRunner:
             "max_retries": self.config.get("max_retries", 0),
             "duration_limit": duration_limit,
             "max_concurrent_sessions": max_concurrent_sessions,
+            "max_requests": max_requests,
             "provider": provider,
             "openrouter_provider_config": openrouter_provider_config_str,
         }
@@ -319,6 +497,16 @@ class BenchmarkRunner:
         client.main(args)
 
     def run_analysis(self):
+        # Check if reusing trace analysis
+        if "trace_analysis" in self.reuse_config:
+            trace_output = Path(self.config["trace_output"])
+            if trace_output.exists() and any(trace_output.iterdir()):
+                logging.info(f"Skipping trace analysis - reusing from run: {self.reuse_config['trace_analysis']}")
+                logging.info(f"Using trace analysis: {trace_output}")
+                return
+            else:
+                logging.warning(f"Reuse specified but trace analysis not found: {trace_output}")
+        
         logging.info("Analyzing trace output...")
         args_dict = {
             "trace": f"{self.config['client_output']}/output.jsonl",

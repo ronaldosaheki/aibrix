@@ -1,0 +1,86 @@
+# Service Registry
+# Services combine a model with a provider
+# Each service inherits from base.yaml and merges model + provider configs
+
+services:
+  # GPT-OSS-120B on direct OpenAI API
+  gpt-oss-120b-openai-api:
+    name: "GPT-OSS-120B - OpenAI API (Direct)"
+    description: "GPT-OSS-120B model on direct API endpoint"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"  # Reference to models.yaml
+    provider: "openai-api"  # Reference to providers.yaml
+    overrides:
+      # Service-specific output paths (can use ${model} and ${provider} variables)
+      client_output: "./output/client_output_gpt-oss-120b-openai-api"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openai-api"
+
+  # GPT-OSS-120B on OpenRouter with Cerebras
+  gpt-oss-120b-openrouter-cerebras:
+    name: "GPT-OSS-120B - OpenRouter (Cerebras)"
+    description: "GPT-OSS-120B model via OpenRouter routing to Cerebras"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"
+    provider: "openrouter-cerebras"
+    overrides:
+      target_model: "openai/gpt-oss-120b"  # OpenRouter uses full model path
+      client_output: "./output/client_output_gpt-oss-120b-openrouter-cerebras"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openrouter-cerebras"
+
+  # GPT-OSS-120B on OpenRouter with SambaNova
+  gpt-oss-120b-openrouter-sambanova:
+    name: "GPT-OSS-120B - OpenRouter (SambaNova)"
+    description: "GPT-OSS-120B model via OpenRouter routing to SambaNova"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"
+    provider: "openrouter-sambanova"
+    overrides:
+      target_model: "openai/gpt-oss-120b"
+      client_output: "./output/client_output_gpt-oss-120b-openrouter-sambanova"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openrouter-sambanova"
+
+  # GPT-OSS-120B on OpenRouter with Fireworks
+  gpt-oss-120b-openrouter-fireworks:
+    name: "GPT-OSS-120B - OpenRouter (Fireworks)"
+    description: "GPT-OSS-120B model via OpenRouter routing to Fireworks"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"
+    provider: "openrouter-fireworks"
+    overrides:
+      target_model: "openai/gpt-oss-120b"
+      client_output: "./output/client_output_gpt-oss-120b-openrouter-fireworks"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openrouter-fireworks"
+
+  # GPT-OSS-120B on OpenRouter with Together
+  gpt-oss-120b-openrouter-together:
+    name: "GPT-OSS-120B - OpenRouter (Together)"
+    description: "GPT-OSS-120B model via OpenRouter routing to Together"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"
+    provider: "openrouter-together"
+    overrides:
+      target_model: "openai/gpt-oss-120b"
+      client_output: "./output/client_output_gpt-oss-120b-openrouter-together"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openrouter-together"
+
+  # GPT-OSS-120B on OpenRouter with Baseten
+  gpt-oss-120b-openrouter-baseten:
+    name: "GPT-OSS-120B - OpenRouter (Baseten)"
+    description: "GPT-OSS-120B model via OpenRouter routing to Baseten"
+    base: "configs/base.yaml"
+    model: "gpt-oss-120b"
+    provider: "openrouter-baseten"
+    overrides:
+      target_model: "openai/gpt-oss-120b"
+      client_output: "./output/client_output_gpt-oss-120b-openrouter-baseten"
+      trace_output: "./output/trace_analysis_gpt-oss-120b-openrouter-baseten"
+
+  # Example: To add a new model on existing providers, just add entries like:
+  # qwen-235b-openai-api:
+  #   name: "Qwen 235B - OpenAI API"
+  #   base: "configs/base.yaml"
+  #   model: "qwen-235b"
+  #   provider: "openai-api"
+  #   overrides:
+  #     client_output: "./output/client_output_qwen-235b-openai-api"
+  #     trace_output: "./output/trace_analysis_qwen-235b-openai-api"

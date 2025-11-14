@@ -1,0 +1,24 @@
+# Model Registry
+# Define models here. Each model specifies tokenizer and model-specific settings
+
+models:
+  gpt-oss-120b:
+    name: "GPT-OSS-120B"
+    description: "OpenAI GPT-OSS-120B model"
+    tokenizer: "openai/gpt-oss-120b"
+    target_model: "gpt-oss-120b"  # Model identifier for API calls
+    hf_token: "${HF_TOKEN}"  # Hugging Face token for tokenizer download
+    # Model-specific dataset/workload settings can go here
+    dataset_dir: "./output/dataset_gpt-oss-120"
+    workload_dir: "./output/workload_gpt-oss-120b/${workload_type}"
+
+  # Example: Add more models here
+  # qwen-235b:
+  #   name: "Qwen 235B"
+  #   description: "Qwen 235B model"
+  #   tokenizer: "Qwen/Qwen3-235B-A22B-Instruct-2507"
+  #   target_model: "qwen-235b"
+  #   hf_token: "${HF_TOKEN}"
+  #   dataset_dir: "./output/dataset_qwen-235b"
+  #   workload_dir: "./output/workload_qwen-235b/${workload_type}"
+

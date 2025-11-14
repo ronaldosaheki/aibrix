@@ -49,10 +49,14 @@ async def send_request_streaming(client: openai.AsyncOpenAI,
             "model": model,
             "messages": prompt,
             "temperature": 0,
-            "max_tokens": max_output,
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        
+        # Only set max_tokens if max_output is not None
+        # When max_output is None, let the API use its default
+        if max_output is not None:
+            request_params["max_tokens"] = max_output
         
         # Add provider configuration to extra_body if configured
         if openrouter_provider_config:
@@ -168,7 +172,21 @@ async def send_request_streaming(client: openai.AsyncOpenAI,
             "target_request_id": target_request_id,
             "session_id": session_id,
         }
-        logging.error(f"Request {request_id}: Error ({error_type}): {str(e)}")
+        # Provide helpful error message for max_tokens errors
+        error_message = str(e)
+        if "max_tokens" in error_message.lower() and ("-461" in error_message or "must be at least 1" in error_message):
+            logging.error(
+                f"Request {request_id}: Error ({error_type}): {error_message}\n"
+                f"  This error indicates that the input prompt (including session history) is too long.\n"
+                f"  The API tried to calculate: max_tokens = context_window - input_tokens, which resulted in a negative value.\n"
+                f"  Solutions:\n"
+                f"  1. Reduce the --output-token-limit (current: {max_output})\n"
+                f"  2. Use a model with a larger context window\n"
+                f"  3. Reduce the prompt length or session history\n"
+                f"  4. Check if prompt length exceeds model's context window"
+            )
+        else:
+            logging.error(f"Request {request_id}: Error ({error_type}): {error_message}")
         output_file.write(json.dumps(error_result) + "\n")
         output_file.flush()
         if session_id is not None:
@@ -205,8 +223,12 @@ async def send_request_batch(client: openai.AsyncOpenAI,
             "model": model,
             "messages": prompt,
             "temperature": 0,
-            "max_tokens": max_output,
         }
+        
+        # Only set max_tokens if max_output is not None
+        # When max_output is None, let the API use its default
+        if max_output is not None:
+            request_params["max_tokens"] = max_output
         
         # Add provider configuration to extra_body if configured
         if openrouter_provider_config:
@@ -282,7 +304,21 @@ async def send_request_batch(client: openai.AsyncOpenAI,
             "target_pod": target_pod,
             "session_id": session_id,
         }
-        logging.error(f"Request {request_id}: Error ({error_type}): {str(e)}")
+        # Provide helpful error message for max_tokens errors
+        error_message = str(e)
+        if "max_tokens" in error_message.lower() and ("-461" in error_message or "must be at least 1" in error_message):
+            logging.error(
+                f"Request {request_id}: Error ({error_type}): {error_message}\n"
+                f"  This error indicates that the input prompt (including session history) is too long.\n"
+                f"  The API tried to calculate: max_tokens = context_window - input_tokens, which resulted in a negative value.\n"
+                f"  Solutions:\n"
+                f"  1. Reduce the --output-token-limit (current: {max_output})\n"
+                f"  2. Use a model with a larger context window\n"
+                f"  3. Reduce the prompt length or session history\n"
+                f"  4. Check if prompt length exceeds model's context window"
+            )
+        else:
+            logging.error(f"Request {request_id}: Error ({error_type}): {error_message}")
         output_file.write(json.dumps(error_result) + "\n")
         output_file.flush()
         if session_id is not None:
@@ -303,12 +339,14 @@ async def benchmark_launch(
     send_request_func: Callable,
     duration_limit: Optional[float] = None,
     max_concurrent_sessions: Optional[int] = None,
+    max_requests: Optional[int] = None,
     provider: str = "custom",
     openrouter_provider_config: Optional[dict] = None,
 ) -> None:
     request_id = 0
     base_time = time.time()
     num_requests = 0
+    requests_processed = 0  # Track total requests processed
     tasks: List[asyncio.Task] = []
     client = create_client(api_key, endpoint, max_retries, timeout, routing_strategy)
 
@@ -358,23 +396,36 @@ async def benchmark_launch(
             initiated_sessions.add(session_id)
 
         for requests_dict in load_struct:
+            # Check if max_requests limit has been reached
+            if max_requests is not None and requests_processed >= max_requests:
+                logging.warning(f"Max requests limit ({max_requests}) reached. Stopping workload processing.")
+                break
+            
             ts = int(requests_dict["timestamp"] * scale_factor)
             requests = requests_dict["requests"]
             target_time = base_time + ts / 1000.0
             for i in range(len(requests)):
+                # Check if max_requests limit has been reached
+                if max_requests is not None and requests_processed >= max_requests:
+                    logging.warning(f"Max requests limit ({max_requests}) reached. Stopping workload processing.")
+                    break
+                    
                 session_id = requests[i].get("session_id", None) if "session_id" in requests[0] else None
                 if session_id is None or session_id not in initiated_sessions:
                     # Check if we can start a new session without blocking
                     if max_concurrent_sessions is None or len(active_sessions) < max_concurrent_sessions:
                         await start_session_if_capacity_available(requests[i], session_id)
+                        requests_processed += 1
                     else:
                         # Can't start now, add to pending new sessions queue with timing info
                         logging.info(f"Session {session_id} cannot start yet (capacity full). Adding first request to pending.")
                         pending_new_sessions.append((requests[i], target_time))
+                        requests_processed += 1
                         initiated_sessions.add(session_id)  # Mark as initiated so future requests go to pending_sessioned_requests
                 else:
                     logging.info(f"Adding request for session {session_id} to pending queue. Pending count: {len(pending_sessioned_requests.get(session_id, [])) + 1}")
                     pending_sessioned_requests.setdefault(session_id, []).append((requests[i], target_time))
+                    requests_processed += 1
 
         # Merge pending_new_sessions into pending_sessioned_requests
         for req, ttime in pending_new_sessions:
@@ -480,6 +531,11 @@ def main(args):
         # Get max_concurrent_sessions from args if provided
         max_concurrent_sessions = args.max_concurrent_sessions if hasattr(args, 'max_concurrent_sessions') else None
         
+        # Get max_requests from args if provided
+        max_requests = args.max_requests if hasattr(args, 'max_requests') else None
+        if max_requests:
+            logging.info(f"Max requests limit set to {max_requests}")
+        
         # Get provider configuration from args if provided
         provider = args.provider if hasattr(args, 'provider') else "custom"
         openrouter_provider_config = None
@@ -505,6 +561,7 @@ def main(args):
             send_request_func=send_request_func,
             duration_limit=duration_limit,
             max_concurrent_sessions=max_concurrent_sessions,
+            max_requests=max_requests,
             provider=provider,
             openrouter_provider_config=openrouter_provider_config,
         ))
@@ -527,6 +584,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-retries', type=int, default=0, help="Number of maximum retries for each request.")
     parser.add_argument('--duration-limit', type=float, default=None, help="Duration limit in seconds. Benchmark stops after this time, cancelling pending requests. If not set, uses workload's last timestamp.")
     parser.add_argument('--max-concurrent-sessions', type=int, default=None, help="Maximum number of sessions that can run concurrently. Only applies to sessioned workloads.")
+    parser.add_argument('--max-requests', type=int, default=None, help="Maximum number of requests to process. Stops after this many requests have been sent.")
     parser.add_argument('--provider', type=str, default="custom", help="Provider type: 'openrouter' or 'custom'")
     parser.add_argument('--openrouter-provider-config', type=str, default=None, help="OpenRouter provider configuration as JSON string")
 

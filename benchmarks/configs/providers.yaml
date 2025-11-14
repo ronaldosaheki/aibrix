@@ -1,0 +1,112 @@
+# Provider Registry
+# Define providers here. Each provider specifies endpoint, API key, and provider-specific settings
+
+providers:
+  # Direct OpenAI-compatible API endpoint
+  openai-api:
+    name: "OpenAI API (Direct)"
+    description: "Direct API endpoint"
+    provider: "custom"
+    endpoint: "${OPENAI_ENDPOINT}"
+    api_key: "${OPENAI_API_KEY}"
+    # Provider-specific settings
+    # (none for custom endpoint)
+
+  # OpenRouter.ai base configuration
+  openrouter:
+    name: "OpenRouter.ai"
+    description: "OpenRouter.ai API router"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    # Common OpenRouter settings
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # OpenRouter with Cerebras provider routing
+  openrouter-cerebras:
+    name: "OpenRouter - Cerebras"
+    description: "OpenRouter.ai routing to Cerebras provider"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    openrouter_provider_config:
+      order: ["cerebras"]
+      allow_fallbacks: false
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # OpenRouter with SambaNova provider routing
+  openrouter-sambanova:
+    name: "OpenRouter - SambaNova"
+    description: "OpenRouter.ai routing to SambaNova provider"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    openrouter_provider_config:
+      only: ["sambanova"]
+      order: ["sambanova"]
+      allow_fallbacks: false
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # OpenRouter with Fireworks provider routing
+  openrouter-fireworks:
+    name: "OpenRouter - Fireworks"
+    description: "OpenRouter.ai routing to Fireworks provider"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    openrouter_provider_config:
+      only: ["fireworks"]
+      order: ["fireworks"]
+      allow_fallbacks: false
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # OpenRouter with Together provider routing
+  openrouter-together:
+    name: "OpenRouter - Together"
+    description: "OpenRouter.ai routing to Together provider"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    openrouter_provider_config:
+      order: ["together"]
+      allow_fallbacks: false
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # OpenRouter with Baseten provider routing
+  openrouter-baseten:
+    name: "OpenRouter - Baseten"
+    description: "OpenRouter.ai routing to Baseten provider"
+    provider: "openrouter"
+    endpoint: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API_KEY}"
+    openrouter_provider_config:
+      order: ["baseten"]
+      allow_fallbacks: false
+    workload_configs:
+      constant:
+        target_qps: 4
+    duration_ms: 300000
+
+  # Example: Add more providers here
+  # custom-endpoint-2:
+  #   name: "Custom Endpoint 2"
+  #   description: "Another custom endpoint"
+  #   provider: "custom"
+  #   endpoint: "https://api.example.com"
+  #   api_key: "${CUSTOM_API_KEY}"
+

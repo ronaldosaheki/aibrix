@@ -109,16 +109,65 @@ def main(args):
         "Errors": calculate_statistics(total_errors),
     }
 
-    # Print statistics
+    # Collect statistics output for text file
+    stats_output = []
+    stats_output.append("=" * 80)
+    stats_output.append("Performance Metrics Statistics")
+    stats_output.append("=" * 80)
+    stats_output.append("")
+    
+    # Print statistics and collect for text file
     for metric, (total, avg, median, p99) in stats.items():
-        logging.warning(f"{metric} Statistics: Total = {total:.4f} Average = {avg:.4f}, Median = {median:.4f}, 99th Percentile = {p99:.4f}")
+        line = f"{metric} Statistics: Total = {total:.4f} Average = {avg:.4f}, Median = {median:.4f}, 99th Percentile = {p99:.4f}"
+        logging.warning(line)
+        stats_output.append(line)
+    
     if goodput != None:
-        logging.warning(f"Goodput (reqs/s) {goodput:.4f}")
-    logging.warning(f"Total requests : {len(data)}")
-    logging.warning(f"Total Duration (s): {np.max(end_times) - np.min(start_times)}")
-    logging.warning(f"Total tokens generated (toks): {np.sum(total_tokens)}")
-    logging.warning(f"Throughput (end-to-end, toks/s): {np.sum(total_tokens)/(np.max(end_times) - np.min(start_times))}")
-    # logging.warning(f"Failure Rate (%) {(total_errors / len(data)) * 100 if len(data) > 0 else 0}")
+        line = f"Goodput (reqs/s): {goodput:.4f}"
+        logging.warning(line)
+        stats_output.append("")
+        stats_output.append(line)
+    
+    stats_output.append("")
+    stats_output.append("-" * 80)
+    stats_output.append("Summary Statistics")
+    stats_output.append("-" * 80)
+    
+    total_requests = len(data)
+    total_duration = np.max(end_times) - np.min(start_times)
+    total_tokens_gen = np.sum(total_tokens)
+    throughput_e2e = np.sum(total_tokens) / total_duration if total_duration > 0 else 0
+    failure_rate = (np.sum(total_errors) / total_requests * 100) if total_requests > 0 else 0
+    
+    line = f"Total requests: {total_requests}"
+    logging.warning(line)
+    stats_output.append(line)
+    
+    line = f"Total Duration (s): {total_duration:.4f}"
+    logging.warning(line)
+    stats_output.append(line)
+    
+    line = f"Total tokens generated (toks): {total_tokens_gen:.0f}"
+    logging.warning(line)
+    stats_output.append(line)
+    
+    line = f"Throughput (end-to-end, toks/s): {throughput_e2e:.4f}"
+    logging.warning(line)
+    stats_output.append(line)
+    
+    line = f"Failure Rate (%): {failure_rate:.2f}"
+    logging.warning(line)
+    stats_output.append(line)
+    
+    stats_output.append("")
+    stats_output.append("=" * 80)
+    
+    # Write statistics to text file
+    os.makedirs(output_path, exist_ok=True)
+    stats_file = f"{output_path}/performance_metrics_statistics.txt"
+    with open(stats_file, 'w') as f:
+        f.write('\n'.join(stats_output))
+    logging.info(f"Statistics saved to: {stats_file}")
 
     # Create a DataFrame for plotting
     df = pd.DataFrame({

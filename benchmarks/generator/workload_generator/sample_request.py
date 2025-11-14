@@ -14,8 +14,16 @@ def load_requests(
         dataset_path: str,
         tokenizer: PreTrainedTokenizerBase,
 ) -> pd.DataFrame:
-    with open(dataset_path, encoding='utf-8') as f:
-        dataset = [json.loads(line) for line in f]
+    with open(dataset_path, 'r', encoding='utf-8') as f:
+        dataset = []
+        for line_num, line in enumerate(f, 1):
+            line = line.rstrip('\n\r')
+            if not line.strip():  # Skip empty lines
+                continue
+            try:
+                dataset.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                raise ValueError(f"JSON decode error in {dataset_path} at line {line_num}, position {e.pos}: {e.msg}\nLine content (first 200 chars): {repr(line[:200])}") from e
         if "session_id" in dataset[0]:
             return _load_sessioned_dataset(dataset, tokenizer)
         else:
