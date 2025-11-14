@@ -81,12 +81,26 @@ class BenchmarkRunner:
             raw_config = yaml.safe_load(content)
             raw_config = self.apply_overrides(raw_config)
         
+        # Recursively process config to handle nested structures and non-string values
+        def resolve_value(value, config_dict):
+            """Recursively resolve template substitutions in config values."""
+            if isinstance(value, str):
+                # Process string values with template substitution
+                template = Template(value)
+                return template.safe_substitute(config_dict)
+            elif isinstance(value, dict):
+                # Recursively process nested dictionaries
+                return {k: resolve_value(v, config_dict) for k, v in value.items()}
+            elif isinstance(value, list):
+                # Recursively process lists
+                return [resolve_value(item, config_dict) for item in value]
+            else:
+                # Return non-string, non-container values as-is
+                return value
+        
         resolved_config = {}
         for key, value in raw_config.items():
-            if isinstance(value, str):
-                template = Template(value)
-                value = template.safe_substitute(raw_config)
-            resolved_config[key] = value
+            resolved_config[key] = resolve_value(value, raw_config)
         self.config = resolved_config
 
     def ensure_directories(self, path_str):

@@ -454,7 +454,7 @@ def main(args):
                                                 duration_ms=args.duration_ms,
                                                 interval_ms=args.interval_ms,
                                                 max_concurrent_sessions=args.max_concurrent_sessions,
-                                                output_file=f"{args.output_dir}/workload",
+                                                output_file=f"{args.output_dir}/{args.output_filename}",
                                                 to_jsonl=(args.output_format == "jsonl"),
                                             )
         workload_dict[comp_pattern_type] = generated_workload
@@ -469,7 +469,7 @@ def main(args):
                                                     duration_ms=args.duration_ms, 
                                                     interval_ms=args.interval_ms,
                                                     max_concurrent_sessions=args.max_concurrent_sessions,
-                                                    output_file=f"{args.output_dir}/workload",
+                                                    output_file=f"{args.output_dir}/{args.output_filename}",
                                                     to_jsonl=(args.output_format == "jsonl"),
                                                 )
         elif args.trace_type == "stat":
@@ -484,7 +484,7 @@ def main(args):
                                                             output_scale=args.output_scale,
                                                             stat_trace_type=args.stat_trace_type,
                                                             max_concurrent_sessions=args.max_concurrent_sessions,
-                                                            output_file=f"{args.output_dir}/workload",
+                                                            output_file=f"{args.output_dir}/{args.output_filename}",
                                                             to_jsonl=(args.output_format == "jsonl"),
                                                             )
 
@@ -494,7 +494,7 @@ def main(args):
                                                          duration_ms=args.duration_ms, 
                                                          tokenizer=tokenizer,
                                                          interval_ms=args.interval_ms, 
-                                                         output_file=f"{args.output_dir}/workload",
+                                                         output_file=f"{args.output_dir}/{args.output_filename}",
                                                          to_jsonl=(args.output_format == "jsonl"),
                                                          )
 
@@ -503,7 +503,7 @@ def main(args):
                                                               prompt_file_path=args.prompt_file,
                                                               duration_ms=args.duration_ms, 
                                                               tokenizer=tokenizer,
-                                                              output_file=f"{args.output_dir}/workload",
+                                                              output_file=f"{args.output_dir}/{args.output_filename}",
                                                               to_jsonl=(args.output_format == "jsonl"),
                                                               )
         
@@ -534,6 +534,8 @@ if __name__ == '__main__':
                                                                                          'the workload.')
     parser.add_argument('--output-format', type=str, choices=['json', 'jsonl'], default='jsonl',
                         help='Set output data format to either .json or .jsonl (default is .json).')
+    parser.add_argument('--output-filename', type=str, required=False, default="workload",
+                        help='Output filename (without extension). Default is "workload".')
     
     ###### Synthetic and constant workload
     parser.add_argument('--target-qps', type=int, required=False, default=1, help='Target QPS for the workload.')
