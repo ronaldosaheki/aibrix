@@ -87,7 +87,13 @@ class BenchmarkRunner:
             if isinstance(value, str):
                 # Process string values with template substitution
                 template = Template(value)
-                return template.safe_substitute(config_dict)
+                result = template.safe_substitute(config_dict)
+                # If there are still unresolved variables (like ${run_id}), try substitution again
+                # This handles cases where variables are added via overrides
+                if "${" in result:
+                    # Try substitution again in case new variables were added
+                    result = template.safe_substitute(config_dict)
+                return result
             elif isinstance(value, dict):
                 # Recursively process nested dictionaries
                 return {k: resolve_value(v, config_dict) for k, v in value.items()}
@@ -98,9 +104,18 @@ class BenchmarkRunner:
                 # Return non-string, non-container values as-is
                 return value
         
+        # First pass: resolve all template substitutions
         resolved_config = {}
         for key, value in raw_config.items():
             resolved_config[key] = resolve_value(value, raw_config)
+        
+        # Second pass: resolve any remaining variables that might reference newly resolved values
+        # This handles cases where one variable depends on another
+        for key, value in resolved_config.items():
+            if isinstance(value, str) and "${" in value:
+                template = Template(value)
+                resolved_config[key] = template.safe_substitute(resolved_config)
+        
         self.config = resolved_config
 
     def ensure_directories(self, path_str):
@@ -117,6 +132,19 @@ class BenchmarkRunner:
 
         subconfig = self.config["dataset_configs"][dataset_type]
         dataset_file = self.config["dataset_file"]  # Use the pre-defined dataset_file
+        
+        # Check if dataset_file still has unresolved variables
+        if "${" in dataset_file:
+            logging.warning(f"dataset_file still contains unresolved variables: {dataset_file}")
+            logging.warning(f"Available config keys: {list(self.config.keys())}")
+            # Try to resolve it again with current config
+            template = Template(dataset_file)
+            dataset_file = template.safe_substitute(self.config)
+            logging.info(f"Resolved dataset_file to: {dataset_file}")
+        
+        # Ensure the directory for dataset_file exists
+        dataset_file_path = Path(dataset_file)
+        dataset_file_path.parent.mkdir(parents=True, exist_ok=True)
 
         if dataset_type == "synthetic_shared":
             args_dict = {
