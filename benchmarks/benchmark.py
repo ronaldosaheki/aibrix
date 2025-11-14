@@ -287,6 +287,9 @@ class BenchmarkRunner:
         # This is separate from workload generator's max_concurrent_sessions
         max_concurrent_sessions = self.config.get("client_max_concurrent_sessions", None)
         
+        # Get client_max_requests from client config
+        max_requests = self.config.get("client_max_requests", None)
+        
         # Get provider configuration
         provider = self.config.get("provider", "custom")
         openrouter_provider_config = self.config.get("openrouter_provider_config", None)
@@ -311,6 +314,7 @@ class BenchmarkRunner:
             "max_retries": self.config.get("max_retries", 0),
             "duration_limit": duration_limit,
             "max_concurrent_sessions": max_concurrent_sessions,
+            "max_requests": max_requests,
             "provider": provider,
             "openrouter_provider_config": openrouter_provider_config_str,
         }

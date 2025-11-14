@@ -303,6 +303,7 @@ async def benchmark_launch(
     send_request_func: Callable,
     duration_limit: Optional[float] = None,
     max_concurrent_sessions: Optional[int] = None,
+    max_requests: Optional[int] = None,
     provider: str = "custom",
     openrouter_provider_config: Optional[dict] = None,
 ) -> None:
@@ -319,6 +320,10 @@ async def benchmark_launch(
         if max_concurrent_sessions is not None:
             logging.info(f"Max concurrent sessions limit: {max_concurrent_sessions}")
 
+        # Set max_requests limit
+        if max_requests is not None:
+            logging.info(f"Max requests limit: {max_requests}")
+
         # Set workload duration based on duration_limit parameter
         # If duration_limit is None, don't set a time limit (wait for all tasks)
         if duration_limit is None:
@@ -330,6 +335,10 @@ async def benchmark_launch(
 
         def send(request):
             nonlocal request_id, num_requests
+            # Check max_requests limit before sending
+            if max_requests is not None and num_requests >= max_requests:
+                logging.info(f"Max requests limit ({max_requests}) reached. Skipping request.")
+                return
             task = asyncio.create_task(
                 send_request_func(
                     client=client,
@@ -358,10 +367,18 @@ async def benchmark_launch(
             initiated_sessions.add(session_id)
 
         for requests_dict in load_struct:
+            # Check max_requests limit before processing more workload entries
+            if max_requests is not None and num_requests >= max_requests:
+                logging.info(f"Max requests limit ({max_requests}) reached. Stopping workload processing.")
+                break
             ts = int(requests_dict["timestamp"] * scale_factor)
             requests = requests_dict["requests"]
             target_time = base_time + ts / 1000.0
             for i in range(len(requests)):
+                # Check max_requests limit before processing each request
+                if max_requests is not None and num_requests >= max_requests:
+                    logging.info(f"Max requests limit ({max_requests}) reached. Stopping request processing.")
+                    break
                 session_id = requests[i].get("session_id", None) if "session_id" in requests[0] else None
                 if session_id is None or session_id not in initiated_sessions:
                     # Check if we can start a new session without blocking
@@ -375,6 +392,9 @@ async def benchmark_launch(
                 else:
                     logging.info(f"Adding request for session {session_id} to pending queue. Pending count: {len(pending_sessioned_requests.get(session_id, [])) + 1}")
                     pending_sessioned_requests.setdefault(session_id, []).append((requests[i], target_time))
+            # Break outer loop if max_requests reached
+            if max_requests is not None and num_requests >= max_requests:
+                break
 
         # Merge pending_new_sessions into pending_sessioned_requests
         for req, ttime in pending_new_sessions:
@@ -385,6 +405,10 @@ async def benchmark_launch(
         logging.info(f"Finished processing all workload entries. Pending sessions: {len(pending_sessioned_requests)}, Pending requests: {sum(len(v) for v in pending_sessioned_requests.values())}")
 
         while len(pending_sessioned_requests) != 0:
+            # Check if max_requests limit has been reached
+            if max_requests is not None and num_requests >= max_requests:
+                logging.info(f"Max requests limit ({max_requests}) reached. Stopping session processing. {len(pending_sessioned_requests)} sessions remain pending.")
+                break
             # Check if duration limit has been exceeded
             if workload_duration is not None:
                 elapsed = time.time() - base_time
@@ -409,6 +433,10 @@ async def benchmark_launch(
 
                     # Start new sessions from pending to maintain capacity
                     while len(pending_sessioned_requests) > 0 and (max_concurrent_sessions is None or len(active_sessions) < max_concurrent_sessions):
+                        # Check max_requests limit before starting new sessions
+                        if max_requests is not None and num_requests >= max_requests:
+                            logging.info(f"Max requests limit ({max_requests}) reached. Stopping new session starts.")
+                            break
                         # Find the first pending session and start it
                         next_session_id = next(iter(pending_sessioned_requests))
                         first_request, target_time = pending_sessioned_requests[next_session_id].pop(0)
@@ -480,6 +508,9 @@ def main(args):
         # Get max_concurrent_sessions from args if provided
         max_concurrent_sessions = args.max_concurrent_sessions if hasattr(args, 'max_concurrent_sessions') else None
         
+        # Get max_requests from args if provided
+        max_requests = args.max_requests if hasattr(args, 'max_requests') else None
+        
         # Get provider configuration from args if provided
         provider = args.provider if hasattr(args, 'provider') else "custom"
         openrouter_provider_config = None
@@ -505,6 +536,7 @@ def main(args):
             send_request_func=send_request_func,
             duration_limit=duration_limit,
             max_concurrent_sessions=max_concurrent_sessions,
+            max_requests=max_requests,
             provider=provider,
             openrouter_provider_config=openrouter_provider_config,
         ))
@@ -527,6 +559,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-retries', type=int, default=0, help="Number of maximum retries for each request.")
     parser.add_argument('--duration-limit', type=float, default=None, help="Duration limit in seconds. Benchmark stops after this time, cancelling pending requests. If not set, uses workload's last timestamp.")
     parser.add_argument('--max-concurrent-sessions', type=int, default=None, help="Maximum number of sessions that can run concurrently. Only applies to sessioned workloads.")
+    parser.add_argument('--max-requests', type=int, default=None, help="Maximum number of requests to process. If set, benchmark stops after processing this many requests. If not set, processes all requests in workload.")
     parser.add_argument('--provider', type=str, default="custom", help="Provider type: 'openrouter' or 'custom'")
     parser.add_argument('--openrouter-provider-config', type=str, default=None, help="OpenRouter provider configuration as JSON string")
 
