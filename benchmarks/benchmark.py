@@ -49,6 +49,45 @@ class BenchmarkRunner:
             path_str = self.config[dir_key]
             self.ensure_directories(path_str)
             
+    def apply_env_overrides(self, config_dict):
+        """Apply environment variable overrides to config.
+        Environment variables that match config keys (case-insensitive) will override config values.
+        For example, ENDPOINT env var will override 'endpoint' in config.
+        """
+        env_overrides = {}
+        for key in config_dict.keys():
+            # Check for environment variable with same name (case-insensitive)
+            env_key_upper = key.upper()
+            env_key_lower = key.lower()
+            env_key_exact = key
+            
+            # Try different case variations
+            env_value = None
+            if env_key_upper in os.environ:
+                env_value = os.environ[env_key_upper]
+            elif env_key_lower in os.environ:
+                env_value = os.environ[env_key_lower]
+            elif env_key_exact in os.environ:
+                env_value = os.environ[env_key_exact]
+            
+            if env_value is not None:
+                # Try to parse as YAML (handles booleans, numbers, null, etc.)
+                try:
+                    parsed_value = yaml.safe_load(env_value)
+                    if parsed_value is None and env_value.lower() not in ['null', 'none', '~']:
+                        parsed_value = env_value
+                except Exception:
+                    parsed_value = env_value
+                
+                env_overrides[key] = parsed_value
+                logging.info(f"Environment variable override: {key} = {parsed_value} (from ${env_key_upper})")
+        
+        # Apply environment variable overrides
+        if env_overrides:
+            config_dict.update(env_overrides)
+        
+        return config_dict
+    
     def apply_overrides(self, config_dict):
         for override in self.overrides:
             if '=' not in override:
@@ -79,7 +118,13 @@ class BenchmarkRunner:
         with open(config_path, 'r') as f:
             content = os.path.expandvars(f.read())
             raw_config = yaml.safe_load(content)
-            raw_config = self.apply_overrides(raw_config)
+        
+        # Apply environment variable overrides (before command-line overrides)
+        # Check for environment variables that match config keys (case-insensitive)
+        raw_config = self.apply_env_overrides(raw_config)
+        
+        # Apply command-line overrides (takes precedence over env vars)
+        raw_config = self.apply_overrides(raw_config)
         
         # Recursively process config to handle nested structures and non-string values
         def resolve_value(value, config_dict):
